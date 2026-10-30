@@ -203,7 +203,12 @@ async function fetchTemplates(){
  return true
 }
 function newTemplate(){sectionMode.value=false;sectionColumns.value=2;sectionRows.value=4;rowHeightsText.value='48, 120, 120, 120';sections.value=[];editingGroupId.value='';editingId.value='';selectedTemplateId.value='';templateName.value='';manufacturer.value='';model.value='';rackUnits.value=1;faceColor.value='#263344';groups.value=[];selectedPort.value=null;notice.value='';error.value=''}
-function loadSelectedTemplate(){const t=templates.value.find(x=>x.id===selectedTemplateId.value);if(!t)return;editingId.value=t.id;templateName.value=t.name;manufacturer.value=t.manufacturer||'';model.value=t.model||'';rackUnits.value=t.rack_units;faceColor.value=t.face_color;const layout=t.layout;groups.value=structuredClone(Array.isArray(layout)?layout:(layout?.groups||[]));sectionMode.value=!!(!Array.isArray(layout)&&layout?.sectionLayout?.enabled);sectionColumns.value=layout?.sectionLayout?.columns||2;sectionRows.value=layout?.sectionLayout?.rows||4;rowHeightsText.value=(layout?.sectionLayout?.rowHeights||[48,120,120,120]).join(', ');sections.value=structuredClone(layout?.sectionLayout?.sections||[]);if(sectionMode.value)applySectionGrid();editingGroupId.value='';notice.value='Template loaded. Changes are not saved until you click Update template.';error.value=''}
+// Convert Vue reactive arrays and objects to plain JSON before persisting them.
+// structuredClone() cannot clone Vue Proxy instances (DataCloneError code 25).
+function snapshotLayout<T>(value:T):T {
+ return JSON.parse(JSON.stringify(value)) as T
+}
+function loadSelectedTemplate(){const t=templates.value.find(x=>x.id===selectedTemplateId.value);if(!t)return;editingId.value=t.id;templateName.value=t.name;manufacturer.value=t.manufacturer||'';model.value=t.model||'';rackUnits.value=t.rack_units;faceColor.value=t.face_color;const layout=t.layout;groups.value=snapshotLayout(Array.isArray(layout)?layout:(layout?.groups||[]));sectionMode.value=!!(!Array.isArray(layout)&&layout?.sectionLayout?.enabled);sectionColumns.value=layout?.sectionLayout?.columns||2;sectionRows.value=layout?.sectionLayout?.rows||4;rowHeightsText.value=(layout?.sectionLayout?.rowHeights||[48,120,120,120]).join(', ');sections.value=snapshotLayout(layout?.sectionLayout?.sections||[]);if(sectionMode.value)applySectionGrid();editingGroupId.value='';notice.value='Template loaded. Changes are not saved until you click Update template.';error.value=''}
 async function saveTemplate(){
  if(saving.value)return
  error.value='';notice.value=''
@@ -215,7 +220,7 @@ async function saveTemplate(){
   const payload={
    name:templateName.value.trim(),manufacturer:manufacturer.value.trim(),model:model.value.trim(),
    rack_units:Number(rackUnits.value),face_color:faceColor.value,
-   layout:sectionMode.value?{version:2,groups:structuredClone(groups.value),sectionLayout:{enabled:true,columns:sectionColumns.value,rows:sectionRows.value,rowHeights:[...rowHeights.value],sections:structuredClone(sections.value)}}:structuredClone(groups.value)
+   layout:sectionMode.value?{version:2,groups:snapshotLayout(groups.value),sectionLayout:{enabled:true,columns:sectionColumns.value,rows:sectionRows.value,rowHeights:[...rowHeights.value],sections:snapshotLayout(sections.value)}}:snapshotLayout(groups.value)
   }
   const query=editingId.value
    ?client.from('switch_templates').update(payload).eq('id',editingId.value)
