@@ -196,8 +196,48 @@ function moveDrag(e:PointerEvent){if(!drag||!faceRef.value)return;const g=groups
 function endDrag(){drag=null}
 onMounted(async()=>{applySectionGrid();window.addEventListener('pointermove',moveDrag);window.addEventListener('pointerup',endDrag);await refreshRole();await fetchTemplates()})
 onUnmounted(()=>{window.removeEventListener('pointermove',moveDrag);window.removeEventListener('pointerup',endDrag)})
-async function fetchTemplates(){const {data,error:e}=await client.from('switch_templates').select('*').order('name');if(e)error.value=e.message;else templates.value=data||[]}
+async function fetchTemplates(){
+ const {data,error:e}=await client.from('switch_templates').select('*').order('name')
+ if(e){error.value=`Could not load templates: ${e.message}`;return false}
+ templates.value=data||[]
+ return true
+}
 function newTemplate(){sectionMode.value=false;sectionColumns.value=2;sectionRows.value=4;rowHeightsText.value='48, 120, 120, 120';sections.value=[];editingGroupId.value='';editingId.value='';selectedTemplateId.value='';templateName.value='';manufacturer.value='';model.value='';rackUnits.value=1;faceColor.value='#263344';groups.value=[];selectedPort.value=null;notice.value='';error.value=''}
 function loadSelectedTemplate(){const t=templates.value.find(x=>x.id===selectedTemplateId.value);if(!t)return;editingId.value=t.id;templateName.value=t.name;manufacturer.value=t.manufacturer||'';model.value=t.model||'';rackUnits.value=t.rack_units;faceColor.value=t.face_color;const layout=t.layout;groups.value=structuredClone(Array.isArray(layout)?layout:(layout?.groups||[]));sectionMode.value=!!(!Array.isArray(layout)&&layout?.sectionLayout?.enabled);sectionColumns.value=layout?.sectionLayout?.columns||2;sectionRows.value=layout?.sectionLayout?.rows||4;rowHeightsText.value=(layout?.sectionLayout?.rowHeights||[48,120,120,120]).join(', ');sections.value=structuredClone(layout?.sectionLayout?.sections||[]);if(sectionMode.value)applySectionGrid();editingGroupId.value='';notice.value='Template loaded. Changes are not saved until you click Update template.';error.value=''}
-async function saveTemplate(){if(!isAdmin.value||!groups.value.length)return;error.value='';notice.value='';saving.value=true;const payload={name:templateName.value.trim(),manufacturer:manufacturer.value.trim(),model:model.value.trim(),rack_units:rackUnits.value,face_color:faceColor.value,layout:sectionMode.value?{version:2,groups:groups.value,sectionLayout:{enabled:true,columns:sectionColumns.value,rows:sectionRows.value,rowHeights:rowHeights.value,sections:sections.value}}:groups.value};const result=editingId.value?await client.from('switch_templates').update(payload).eq('id',editingId.value).select('id').single():await client.from('switch_templates').insert(payload).select('id').single();if(result.error)error.value=result.error.message;else{editingId.value=result.data.id;selectedTemplateId.value=result.data.id;notice.value='Template saved successfully.';await fetchTemplates()}saving.value=false}
+async function saveTemplate(){
+ if(saving.value)return
+ error.value='';notice.value=''
+ if(!isAdmin.value){error.value='Administrator access is required to save templates.';return}
+ if(!templateName.value.trim()){error.value='Enter a template name before saving.';return}
+ if(!groups.value.length){error.value='Add at least one port group before saving.';return}
+ saving.value=true
+ try{
+  const payload={
+   name:templateName.value.trim(),manufacturer:manufacturer.value.trim(),model:model.value.trim(),
+   rack_units:Number(rackUnits.value),face_color:faceColor.value,
+   layout:sectionMode.value?{version:2,groups:structuredClone(groups.value),sectionLayout:{enabled:true,columns:sectionColumns.value,rows:sectionRows.value,rowHeights:[...rowHeights.value],sections:structuredClone(sections.value)}}:structuredClone(groups.value)
+  }
+  const query=editingId.value
+   ?client.from('switch_templates').update(payload).eq('id',editingId.value)
+   :client.from('switch_templates').insert(payload)
+  const {data,error:saveError}=await query.select('id').single()
+  if(saveError)throw saveError
+  if(!data?.id)throw new Error('The database did not return a saved template ID.')
+  editingId.value=data.id
+  selectedTemplateId.value=data.id
+  const reloaded=await fetchTemplates()
+  if(!reloaded){notice.value='Template was saved, but the template list could not be refreshed.';return}
+  if(!templates.value.some(t=>t.id===data.id)){
+   error.value='The save returned an ID, but the template is not visible in the saved list. Check Supabase SELECT policies.'
+   return
+  }
+  error.value=''
+  notice.value='Template saved successfully and verified in the saved templates list.'
+ }catch(e:any){
+  const detail=e?.message||String(e)
+  error.value=`Template was not saved: ${detail}${e?.code?` (Supabase code ${e.code})`:''}`
+  console.error('KC Network Mapper template save failed',e)
+ }finally{saving.value=false}
+}
+
 </script>
