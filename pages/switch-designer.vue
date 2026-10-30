@@ -16,10 +16,10 @@
      <div ref="faceRef" class="switch-face" :style="{backgroundColor:faceColor,height:faceHeight+'px'}">
       <div class="rack-screw screw-left"></div><div class="rack-screw screw-right"></div>
       <div v-if="sectionMode" class="section-face-grid" :style="sectionGridStyle">
-       <div v-for="(section,i) in sections" :key="section.id" class="face-section" :class="{'face-section-empty':!assignedGroup(section)}">
+       <div v-for="(section,i) in sections" :key="section.id" class="face-section" :style="sectionBoxStyle(section)" :class="{'face-section-empty':!assignedGroup(section)}">
         <div class="face-section-label">Section {{ i+1 }} <span v-if="assignedGroup(section)">{{assignedGroup(section)?.title}}</span></div>
         <div v-if="assignedGroup(section)" class="section-port-grid" :style="sectionPortStyle(section, assignedGroup(section)!)">
-         <button v-for="n in assignedGroup(section)!.count" :key="n" type="button" class="face-port" :class="{'fiber-port':assignedGroup(section)!.type!=='RJ45'}" :title="`${assignedGroup(section)!.type} ${assignedGroup(section)!.start+n-1}`" @click="selectedPort={label:String(assignedGroup(section)!.start+n-1),type:assignedGroup(section)!.type,group:assignedGroup(section)!.title}"><span class="port-number">{{assignedGroup(section)!.start+n-1}}</span><span class="port-hole">{{assignedGroup(section)!.type==='RJ45'?'▥':'▭'}}</span></button>
+         <button v-for="n in assignedGroup(section)!.count" :key="n" type="button" class="face-port" :style="portStyle(assignedGroup(section)!)" :class="{'fiber-port':assignedGroup(section)!.type!=='RJ45'}" :title="`${assignedGroup(section)!.type} ${assignedGroup(section)!.start+n-1}`" @click="selectedPort={label:String(assignedGroup(section)!.start+n-1),type:assignedGroup(section)!.type,group:assignedGroup(section)!.title}"><span class="port-number">{{assignedGroup(section)!.start+n-1}}</span><span class="port-hole" :class="{'duplex-hole':isDuplex(assignedGroup(section)!)}"><template v-if="isDuplex(assignedGroup(section)!)"><i></i><i></i></template><template v-else>{{assignedGroup(section)!.type==='RJ45'?'▥':assignedGroup(section)!.sfpAppearance==='simplex'?'◻':'▭'}}</template></span></button>
         </div>
         <div v-else class="section-placeholder">Unassigned</div>
        </div>
@@ -27,9 +27,9 @@
       <div v-if="!sectionMode && !groups.length" class="empty-face">Add a port group to preview the switch</div>
       <div v-for="group in (sectionMode ? [] : groups)" :key="group.id" class="face-group" :style="groupStyle(group)" @pointerdown="startDrag($event,group.id)">
        <div class="face-group-title">{{ group.title }} <span>{{ group.type }}</span></div>
-       <div class="port-grid" :style="{gridTemplateColumns:`repeat(${group.columns}, 28px)`}">
-        <button v-for="n in group.count" :key="n" type="button" class="face-port" :class="{'fiber-port':group.type!=='RJ45'}" :title="`${group.type} ${group.start+n-1}`" @pointerdown.stop @click="selectedPort={label:String(group.start+n-1),type:group.type,group:group.title}">
-         <span class="port-number">{{ group.start+n-1 }}</span><span class="port-hole">{{ group.type==='RJ45'?'▥':'▭' }}</span>
+       <div class="port-grid" :style="{gridTemplateColumns:`repeat(${group.columns}, ${group.portWidth||28}px)`,gap:(group.gap??4)+'px'}">
+        <button v-for="n in group.count" :key="n" type="button" class="face-port" :style="portStyle(group)" :class="{'fiber-port':group.type!=='RJ45'}" :title="`${group.type} ${group.start+n-1}`" @pointerdown.stop @click="selectedPort={label:String(group.start+n-1),type:group.type,group:group.title}">
+         <span class="port-number">{{ group.start+n-1 }}</span><span class="port-hole" :class="{'duplex-hole':isDuplex(group)}"><template v-if="isDuplex(group)"><i></i><i></i></template><template v-else>{{ group.type==='RJ45'?'▥':group.sfpAppearance==='simplex'?'◻':'▭' }}</template></span>
         </button>
        </div>
       </div>
@@ -52,7 +52,10 @@
     <label>Group title</label><input v-model="groupTitle" maxlength="60" placeholder="RJ45 ports">
     <div class="two-fields"><div><label>Port type</label><select v-model="portType"><option v-for="t in portTypes" :key="t" :value="t">{{ t }}</option></select></div><div><label>Port count</label><input v-model.number="portCount" type="number" min="1" max="96"></div></div>
     <div class="two-fields"><div><label>Ports per row</label><input v-model.number="perRow" type="number" min="1" max="24"></div><div><label>First port number</label><input v-model.number="startNumber" type="number" min="1" max="999"></div></div>
-    <button class="btn" :disabled="!isAdmin" @click="addGroup">Add port group</button>
+    <div class="two-fields"><div><label>Port width (px)</label><input v-model.number="portWidth" type="number" min="18" max="90"></div><div><label>Port height (px)</label><input v-model.number="portHeight" type="number" min="24" max="110"></div></div>
+    <label>Spacing between ports (px)</label><input v-model.number="portGap" type="number" min="0" max="40">
+    <template v-if="portType.startsWith('SFP')"><label>Fibre connection appearance</label><select v-model="sfpAppearance"><option value="duplex">Duplex LC (two fibres)</option><option value="simplex">Simplex / BiDi (one fibre)</option><option value="cage">Empty SFP cage</option></select></template>
+    <button class="btn" :disabled="!isAdmin" @click="addGroup">{{ editingGroupId ? 'Update port group' : 'Add port group' }}</button>
     <p v-if="!isAdmin" class="muted">Only administrators can save or edit templates.</p>
     <hr><h2>Groups on front panel</h2>
     <p v-if="!groups.length" class="muted">Add a group to start designing.</p>
@@ -64,6 +67,8 @@
      <div v-for="(section,i) in sections" :key="section.id" class="section-assignment">
       <label>Section {{ i+1 }} (row {{ Math.floor(i/sectionColumns)+1 }}, column {{ i%sectionColumns+1 }})</label>
       <select v-model="section.groupId" :disabled="!isAdmin"><option value="">Unassigned</option><option v-for="g in groups" :key="g.id" :value="g.id" :disabled="sections.some(s=>s.id!==section.id && s.groupId===g.id)">{{g.title}} — {{g.count }} {{g.type}}</option></select>
+      <div class="two-fields"><div><label>Section width (%)</label><input v-model.number="section.widthPercent" type="number" min="30" max="100" :disabled="!isAdmin"></div><div><label>Section height (%)</label><input v-model.number="section.heightPercent" type="number" min="30" max="100" :disabled="!isAdmin"></div></div>
+      <label>Section padding (px)</label><input v-model.number="section.padding" type="number" min="0" max="30" :disabled="!isAdmin">
       <label>Port alignment</label><select v-model="section.alignment" :disabled="!isAdmin"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
      </div>
     </template>
@@ -78,12 +83,13 @@
 </template>
 <script setup lang="ts">
 definePageMeta({middleware:'auth'})
-type Group={id:string;title:string;type:string;count:number;columns:number;start:number;x:number;y:number}
+type Group={id:string;title:string;type:string;count:number;columns:number;start:number;x:number;y:number;portWidth?:number;portHeight?:number;gap?:number;sfpAppearance?:'duplex'|'simplex'|'cage'}
 type Alignment='left'|'center'|'right'|'justify'
-type Section={id:string;groupId:string;alignment:Alignment}
+type Section={id:string;groupId:string;alignment:Alignment;widthPercent?:number;heightPercent?:number;padding?:number}
 const client=useSupabaseClient();const {isAdmin,refreshRole}=useAccess()
 const templateName=ref(''),manufacturer=ref(''),model=ref(''),rackUnits=ref(1),faceColor=ref('#263344')
 const groupTitle=ref('RJ45 ports'),portType=ref('RJ45'),portCount=ref(12),perRow=ref(6),startNumber=ref(1)
+const portWidth=ref(28),portHeight=ref(40),portGap=ref(4),sfpAppearance=ref<'duplex'|'simplex'|'cage'>('duplex')
 const portTypes=['RJ45','SFP','SFP+','SFP28','QSFP','QSFP+','QSFP28','Other']
 const sectionMode=ref(false),sectionColumns=ref(2),sectionRows=ref(4),rowHeightsText=ref('48, 120, 120, 120')
 const sections=ref<Section[]>([])
@@ -91,26 +97,34 @@ const editingGroupId=ref('')
 const rowHeights=computed(()=>{const parts=rowHeightsText.value.split(',').map(v=>Number(v.trim()));return Array.from({length:sectionRows.value},(_,i)=>clamp(Number.isFinite(parts[i])&&parts[i]>0?parts[i]:120,36,500))})
 const sectionGridStyle=computed(()=>({gridTemplateColumns:`repeat(${sectionColumns.value}, minmax(0, 1fr))`,gridTemplateRows:rowHeights.value.map(n=>n+'px').join(' ')}))
 function applySectionGrid(){sectionColumns.value=clamp(Math.floor(Number(sectionColumns.value)||2),1,8);sectionRows.value=clamp(Math.floor(Number(sectionRows.value)||4),1,12);const previous=sections.value;sections.value=Array.from({length:sectionColumns.value*sectionRows.value},(_,i)=>previous[i]?{...previous[i],alignment:normaliseAlignment(previous[i].alignment)}:{id:crypto.randomUUID(),groupId:'',alignment:'left'})}
+function sectionBoxStyle(s:Section){return {width:clamp(Number(s.widthPercent??100),30,100)+'%',height:clamp(Number(s.heightPercent??100),30,100)+'%',padding:clamp(Number(s.padding??6),0,30)+'px',justifySelf:'start' as const,alignSelf:'start' as const,boxSizing:'border-box' as const}}
+function isDuplex(g:Group){return g.type.startsWith('SFP')&&(g.sfpAppearance||'duplex')==='duplex'}
+function portStyle(g:Group){return {width:clamp(Number(g.portWidth??28),18,90)+'px',height:clamp(Number(g.portHeight??40),24,110)+'px'}}
 function assignedGroup(section:Section){return groups.value.find(g=>g.id===section.groupId)}
 function normaliseAlignment(value:unknown):Alignment{return value==='center'||value==='right'||value==='justify'?value:'left'}
 function sectionPortStyle(section:Section,group:Group){
  const columns=Math.min(Math.max(1,group.columns),group.count)
  const alignment=normaliseAlignment(section.alignment)
+ const w=clamp(Number(group.portWidth??28),18,90)
+ const gap=clamp(Number(group.gap??4),0,40)
  return {
-  gridTemplateColumns:alignment==='justify'?`repeat(${columns}, minmax(28px, 1fr))`:`repeat(${columns}, 28px)`,
-  justifyContent:alignment==='left'?'start':alignment==='right'?'end':alignment==='center'?'center':'stretch',
+  gridTemplateColumns:alignment==='justify'?`repeat(${columns}, minmax(${w}px, 1fr))`:`repeat(${columns}, ${w}px)`,
+  gap:gap+'px',
   width:alignment==='justify'?'100%':'max-content',
-  maxWidth:'100%'
+  maxWidth:'100%',
+  marginLeft:alignment==='right'?'auto':alignment==='center'?'auto':'0',
+  marginRight:alignment==='left'?'auto':alignment==='center'?'auto':'0',
+  justifyItems:alignment==='justify'?'center':'start'
  }
 }
 const groups=ref<Group[]>([]),templates=ref<any[]>([]),editingId=ref(''),selectedTemplateId=ref(''),error=ref(''),notice=ref(''),saving=ref(false),selectedPort=ref<any>(null)
 const faceRef=ref<HTMLElement|null>(null);const faceHeight=computed(()=>sectionMode.value?Math.max(160,rowHeights.value.reduce((a,b)=>a+b,0)+32):Math.max(160,rackUnits.value*160));const totalPorts=computed(()=>groups.value.reduce((sum,g)=>sum+g.count,0))
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n))
-const groupWidth=(g:Group)=>g.columns*32+16
-const groupHeight=(g:Group)=>Math.ceil(g.count/g.columns)*45+33
+const groupWidth=(g:Group)=>g.columns*(g.portWidth??28)+Math.max(0,g.columns-1)*(g.gap??4)+16
+const groupHeight=(g:Group)=>Math.ceil(g.count/g.columns)*((g.portHeight??40)+(g.gap??4))+33
 const groupStyle=(g:Group)=>({left:g.x+'px',top:g.y+'px',width:groupWidth(g)+'px'})
-function addGroup(){if(!isAdmin.value)return;const count=clamp(Math.floor(Number(portCount.value)||1),1,96),columns=clamp(Math.floor(Number(perRow.value)||1),1,Math.min(count,24));const x=groups.value.length?Math.min(740,24+groups.value.length*210):24;groups.value.push({id:editingGroupId.value||crypto.randomUUID(),title:groupTitle.value.trim()||portType.value+' ports',type:portType.value,count,columns,start:clamp(Math.floor(Number(startNumber.value)||1),1,999),x,y:24});startNumber.value+=count;editingGroupId.value='';notice.value='';error.value=''}
-function editGroup(index:number){const g=groups.value[index];if(!g)return;editingGroupId.value=g.id;groupTitle.value=g.title;portType.value=g.type;portCount.value=g.count;perRow.value=g.columns;startNumber.value=g.start;groups.value.splice(index,1);notice.value='Group loaded into the editor. Change settings and click Add port group.'}
+function addGroup(){if(!isAdmin.value)return;const count=clamp(Math.floor(Number(portCount.value)||1),1,96),columns=clamp(Math.floor(Number(perRow.value)||1),1,Math.min(count,24));const x=groups.value.length?Math.min(740,24+groups.value.length*210):24;groups.value.push({id:editingGroupId.value||crypto.randomUUID(),title:groupTitle.value.trim()||portType.value+' ports',type:portType.value,count,columns,start:clamp(Math.floor(Number(startNumber.value)||1),1,999),x,y:24,portWidth:clamp(Number(portWidth.value)||28,18,90),portHeight:clamp(Number(portHeight.value)||40,24,110),gap:clamp(Number(portGap.value)||0,0,40),sfpAppearance:sfpAppearance.value});startNumber.value+=count;editingGroupId.value='';notice.value='';error.value=''}
+function editGroup(index:number){const g=groups.value[index];if(!g)return;editingGroupId.value=g.id;groupTitle.value=g.title;portType.value=g.type;portCount.value=g.count;perRow.value=g.columns;startNumber.value=g.start;portWidth.value=g.portWidth??28;portHeight.value=g.portHeight??40;portGap.value=g.gap??4;sfpAppearance.value=g.sfpAppearance??'duplex';groups.value.splice(index,1);notice.value='Group loaded into the editor. Change settings and click Update port group.'}
 function removeGroup(index:number){const g=groups.value[index];if(g)sections.value.forEach(s=>{if(s.groupId===g.id)s.groupId='' });groups.value.splice(index,1)}
 let drag:{id:string;startX:number;startY:number;originalX:number;originalY:number;pointerId:number}|null=null
 function startDrag(e:PointerEvent,id:string){if(!isAdmin.value||!faceRef.value||e.button!==0)return;const g=groups.value.find(x=>x.id===id);if(!g)return;drag={id,startX:e.clientX,startY:e.clientY,originalX:g.x,originalY:g.y,pointerId:e.pointerId};(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)}

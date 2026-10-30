@@ -11,3 +11,12 @@
 .section-port-grid{display:grid;gap:3px;width:max-content;max-width:100%;align-content:start}.section-port-grid .face-port{min-width:28px}.designer-template{display:flex;flex-direction:column;gap:10px}.designer-template .two-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.designer-template .two-fields>div{display:flex;flex-direction:column;gap:8px}.designer-template .color-field{padding:3px;height:42px}@media(max-width:600px){.designer-template .two-fields{grid-template-columns:1fr}}
 
 .section-port-grid[style*="minmax"] .face-port{width:100%}
+
+/* Port sizing, duplex fibre connectors and alignment */
+.section-port-grid{box-sizing:border-box;min-width:0}
+.section-port-grid .face-port{min-width:0;max-width:100%;box-sizing:border-box}
+.section-port-grid[style*="minmax"] .face-port{width:100%!important}
+.port-hole.duplex-hole{display:flex;gap:3px;align-items:center;justify-content:center;padding:2px}
+.port-hole.duplex-hole i{display:block;flex:1;max-width:13px;height:70%;border:1px solid #9dc9d3;border-radius:2px;background:#0a1b25;box-shadow:inset 0 0 0 2px #244b59}
+.section-assignment .two-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.section-assignment .two-fields>div{display:flex;flex-direction:column;gap:5px}
