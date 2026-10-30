@@ -2,13 +2,44 @@
  <div class="designer-page">
   <div class="designer-heading"><div><h1>Visual Switch Designer</h1><p>Create reusable front-panel layouts with draggable port groups.</p></div><NuxtLink class="btn secondary-btn" to="/switches">Manage switches</NuxtLink></div>
   <p v-if="error" class="danger panel">{{ error }}</p><p v-if="notice" class="success-note">{{ notice }}</p>
-  <div class="designer-grid">
-   <section class="panel designer-controls">
+  <section class="panel designer-template">
     <h2>Switch template</h2>
     <label>Template name</label><input v-model="templateName" maxlength="120" placeholder="Core Switch 12 RJ45 + 6 SFP">
     <label>Manufacturer</label><input v-model="manufacturer" maxlength="120" placeholder="e.g. Aruba">
     <label>Model</label><input v-model="model" maxlength="120" placeholder="e.g. 6100">
     <div class="two-fields"><div><label>Rack units</label><select v-model.number="rackUnits"><option v-for="n in 4" :key="n" :value="n">{{ n }}U</option></select></div><div><label>Front panel colour</label><input v-model="faceColor" type="color" class="color-field"></div></div>
+  </section>
+   <section class="panel designer-preview">
+    <div class="designer-heading"><h2>Front-panel preview</h2><span class="muted">{{ totalPorts }} ports · {{ rackUnits }}U</span></div>
+    <p class="muted">{{sectionMode ? "Assign a port group to each section. Click ports to inspect them." : "Drag a port group to reposition it. Click a port to inspect it."}}</p>
+    <div class="panel-scroll">
+     <div ref="faceRef" class="switch-face" :style="{backgroundColor:faceColor,height:faceHeight+'px'}">
+      <div class="rack-screw screw-left"></div><div class="rack-screw screw-right"></div>
+      <div v-if="sectionMode" class="section-face-grid" :style="sectionGridStyle">
+       <div v-for="(section,i) in sections" :key="section.id" class="face-section" :class="{'face-section-empty':!assignedGroup(section)}">
+        <div class="face-section-label">Section {{ i+1 }} <span v-if="assignedGroup(section)">{{assignedGroup(section)?.title}}</span></div>
+        <div v-if="assignedGroup(section)" class="section-port-grid" :style="sectionPortStyle(section, assignedGroup(section)!)">
+         <button v-for="n in assignedGroup(section)!.count" :key="n" type="button" class="face-port" :class="{'fiber-port':assignedGroup(section)!.type!=='RJ45'}" :title="`${assignedGroup(section)!.type} ${assignedGroup(section)!.start+n-1}`" @click="selectedPort={label:String(assignedGroup(section)!.start+n-1),type:assignedGroup(section)!.type,group:assignedGroup(section)!.title}"><span class="port-number">{{assignedGroup(section)!.start+n-1}}</span><span class="port-hole">{{assignedGroup(section)!.type==='RJ45'?'▥':'▭'}}</span></button>
+        </div>
+        <div v-else class="section-placeholder">Unassigned</div>
+       </div>
+      </div>
+      <div v-if="!sectionMode && !groups.length" class="empty-face">Add a port group to preview the switch</div>
+      <div v-for="group in (sectionMode ? [] : groups)" :key="group.id" class="face-group" :style="groupStyle(group)" @pointerdown="startDrag($event,group.id)">
+       <div class="face-group-title">{{ group.title }} <span>{{ group.type }}</span></div>
+       <div class="port-grid" :style="{gridTemplateColumns:`repeat(${group.columns}, 28px)`}">
+        <button v-for="n in group.count" :key="n" type="button" class="face-port" :class="{'fiber-port':group.type!=='RJ45'}" :title="`${group.type} ${group.start+n-1}`" @pointerdown.stop @click="selectedPort={label:String(group.start+n-1),type:group.type,group:group.title}">
+         <span class="port-number">{{ group.start+n-1 }}</span><span class="port-hole">{{ group.type==='RJ45'?'▥':'▭' }}</span>
+        </button>
+       </div>
+      </div>
+     </div>
+    </div>
+    <p v-if="selectedPort" class="port-inspector">Selected: <strong>{{ selectedPort.group }}</strong> · {{ selectedPort.type }} port {{ selectedPort.label }}</p>
+    <p class="muted">The preview represents the physical face. Port labels, types and positions are saved in the template.</p>
+   </section>
+  <div class="designer-grid">
+   <section class="panel designer-controls">
     <hr><h2>Panel sections</h2>
     <label><input type="checkbox" v-model="sectionMode" :disabled="!isAdmin"> Enable section layout</label>
     <template v-if="sectionMode">
@@ -33,6 +64,7 @@
      <div v-for="(section,i) in sections" :key="section.id" class="section-assignment">
       <label>Section {{ i+1 }} (row {{ Math.floor(i/sectionColumns)+1 }}, column {{ i%sectionColumns+1 }})</label>
       <select v-model="section.groupId" :disabled="!isAdmin"><option value="">Unassigned</option><option v-for="g in groups" :key="g.id" :value="g.id" :disabled="sections.some(s=>s.id!==section.id && s.groupId===g.id)">{{g.title}} — {{g.count }} {{g.type}}</option></select>
+      <label>Port alignment</label><select v-model="section.alignment" :disabled="!isAdmin"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
      </div>
     </template>
     <hr><h2>Save and reuse</h2>
@@ -40,42 +72,15 @@
     <button class="small-btn" @click="newTemplate">New blank template</button>
     <label>Load saved template</label><select v-model="selectedTemplateId" @change="loadSelectedTemplate"><option value="">Choose template…</option><option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option></select>
    </section>
-   <section class="panel designer-preview">
-    <div class="designer-heading"><h2>Front-panel preview</h2><span class="muted">{{ totalPorts }} ports · {{ rackUnits }}U</span></div>
-    <p class="muted">{{sectionMode ? "Assign a port group to each section. Click ports to inspect them." : "Drag a port group to reposition it. Click a port to inspect it."}}</p>
-    <div class="panel-scroll">
-     <div ref="faceRef" class="switch-face" :style="{backgroundColor:faceColor,height:faceHeight+'px'}">
-      <div class="rack-screw screw-left"></div><div class="rack-screw screw-right"></div>
-      <div v-if="sectionMode" class="section-face-grid" :style="sectionGridStyle">
-       <div v-for="(section,i) in sections" :key="section.id" class="face-section" :class="{'face-section-empty':!assignedGroup(section)}">
-        <div class="face-section-label">Section {{ i+1 }} <span v-if="assignedGroup(section)">{{assignedGroup(section)?.title}}</span></div>
-        <div v-if="assignedGroup(section)" class="section-port-grid" :style="{gridTemplateColumns:`repeat(${Math.min(assignedGroup(section)!.columns,assignedGroup(section)!.count)}, 28px)`}">
-         <button v-for="n in assignedGroup(section)!.count" :key="n" type="button" class="face-port" :class="{'fiber-port':assignedGroup(section)!.type!=='RJ45'}" :title="`${assignedGroup(section)!.type} ${assignedGroup(section)!.start+n-1}`" @click="selectedPort={label:String(assignedGroup(section)!.start+n-1),type:assignedGroup(section)!.type,group:assignedGroup(section)!.title}"><span class="port-number">{{assignedGroup(section)!.start+n-1}}</span><span class="port-hole">{{assignedGroup(section)!.type==='RJ45'?'▥':'▭'}}</span></button>
-        </div>
-        <div v-else class="section-placeholder">Unassigned</div>
-       </div>
-      </div>
-      <div v-if="!sectionMode && !groups.length" class="empty-face">Add a port group to preview the switch</div>
-      <div v-for="group in (sectionMode ? [] : groups)" :key="group.id" class="face-group" :style="groupStyle(group)" @pointerdown="startDrag($event,group.id)">
-       <div class="face-group-title">{{ group.title }} <span>{{ group.type }}</span></div>
-       <div class="port-grid" :style="{gridTemplateColumns:`repeat(${group.columns}, 28px)`}">
-        <button v-for="n in group.count" :key="n" type="button" class="face-port" :class="{'fiber-port':group.type!=='RJ45'}" :title="`${group.type} ${group.start+n-1}`" @pointerdown.stop @click="selectedPort={label:String(group.start+n-1),type:group.type,group:group.title}">
-         <span class="port-number">{{ group.start+n-1 }}</span><span class="port-hole">{{ group.type==='RJ45'?'▥':'▭' }}</span>
-        </button>
-       </div>
-      </div>
-     </div>
-    </div>
-    <p v-if="selectedPort" class="port-inspector">Selected: <strong>{{ selectedPort.group }}</strong> · {{ selectedPort.type }} port {{ selectedPort.label }}</p>
-    <p class="muted">The preview represents the physical face. Port labels, types and positions are saved in the template.</p>
-   </section>
+
   </div>
  </div>
 </template>
 <script setup lang="ts">
 definePageMeta({middleware:'auth'})
 type Group={id:string;title:string;type:string;count:number;columns:number;start:number;x:number;y:number}
-type Section={id:string;groupId:string}
+type Alignment='left'|'center'|'right'|'justify'
+type Section={id:string;groupId:string;alignment:Alignment}
 const client=useSupabaseClient();const {isAdmin,refreshRole}=useAccess()
 const templateName=ref(''),manufacturer=ref(''),model=ref(''),rackUnits=ref(1),faceColor=ref('#263344')
 const groupTitle=ref('RJ45 ports'),portType=ref('RJ45'),portCount=ref(12),perRow=ref(6),startNumber=ref(1)
@@ -85,8 +90,19 @@ const sections=ref<Section[]>([])
 const editingGroupId=ref('')
 const rowHeights=computed(()=>{const parts=rowHeightsText.value.split(',').map(v=>Number(v.trim()));return Array.from({length:sectionRows.value},(_,i)=>clamp(Number.isFinite(parts[i])&&parts[i]>0?parts[i]:120,36,500))})
 const sectionGridStyle=computed(()=>({gridTemplateColumns:`repeat(${sectionColumns.value}, minmax(0, 1fr))`,gridTemplateRows:rowHeights.value.map(n=>n+'px').join(' ')}))
-function applySectionGrid(){sectionColumns.value=clamp(Math.floor(Number(sectionColumns.value)||2),1,8);sectionRows.value=clamp(Math.floor(Number(sectionRows.value)||4),1,12);const previous=sections.value;sections.value=Array.from({length:sectionColumns.value*sectionRows.value},(_,i)=>previous[i]||{id:crypto.randomUUID(),groupId:''})}
+function applySectionGrid(){sectionColumns.value=clamp(Math.floor(Number(sectionColumns.value)||2),1,8);sectionRows.value=clamp(Math.floor(Number(sectionRows.value)||4),1,12);const previous=sections.value;sections.value=Array.from({length:sectionColumns.value*sectionRows.value},(_,i)=>previous[i]?{...previous[i],alignment:normaliseAlignment(previous[i].alignment)}:{id:crypto.randomUUID(),groupId:'',alignment:'left'})}
 function assignedGroup(section:Section){return groups.value.find(g=>g.id===section.groupId)}
+function normaliseAlignment(value:unknown):Alignment{return value==='center'||value==='right'||value==='justify'?value:'left'}
+function sectionPortStyle(section:Section,group:Group){
+ const columns=Math.min(Math.max(1,group.columns),group.count)
+ const alignment=normaliseAlignment(section.alignment)
+ return {
+  gridTemplateColumns:alignment==='justify'?`repeat(${columns}, minmax(28px, 1fr))`:`repeat(${columns}, 28px)`,
+  justifyContent:alignment==='left'?'start':alignment==='right'?'end':alignment==='center'?'center':'stretch',
+  width:alignment==='justify'?'100%':'max-content',
+  maxWidth:'100%'
+ }
+}
 const groups=ref<Group[]>([]),templates=ref<any[]>([]),editingId=ref(''),selectedTemplateId=ref(''),error=ref(''),notice=ref(''),saving=ref(false),selectedPort=ref<any>(null)
 const faceRef=ref<HTMLElement|null>(null);const faceHeight=computed(()=>sectionMode.value?Math.max(160,rowHeights.value.reduce((a,b)=>a+b,0)+32):Math.max(160,rackUnits.value*160));const totalPorts=computed(()=>groups.value.reduce((sum,g)=>sum+g.count,0))
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n))
