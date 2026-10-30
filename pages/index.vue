@@ -1,0 +1,5 @@
+<template><div><h1>Network dashboard</h1><p>Overview of documented locations. Equipment and cable tracing arrive in later phases.</p><div class="grid"><div class="panel"><div class="muted">Sites</div><div class="stat">{{ sites }}</div></div><div class="panel"><div class="muted">Buildings</div><div class="stat">{{ buildings }}</div></div><div class="panel"><div class="muted">Discovery</div><div class="stat" style="font-size:1.3rem">Manual</div></div></div><div class="panel"><h2>Getting started</h2><p>Add a site, then create buildings assigned to that site.</p><NuxtLink class="link" to="/sites">Manage sites →</NuxtLink></div><p v-if="error" class="danger">{{ error }}</p></div></template>
+<script setup lang="ts">
+definePageMeta({middleware:'auth'});const client=useSupabaseClient();const sites=ref(0);const buildings=ref(0);const error=ref('')
+onMounted(async()=>{const [s,b]=await Promise.all([client.from('sites').select('id',{count:'exact',head:true}),client.from('buildings').select('id',{count:'exact',head:true})]);sites.value=s.count??0;buildings.value=b.count??0;error.value=s.error?.message||b.error?.message||''})
+</script>
