@@ -14,7 +14,9 @@
     <div class="two-fields"><div><label>Port type</label><select v-model="portType"><option v-for="t in portTypes" :key="t" :value="t">{{ t }}</option></select></div><div><label>Port count</label><input v-model.number="portCount" type="number" min="1" max="96"></div></div>
     <div class="two-fields"><div><label>Ports per row</label><input v-model.number="perRow" type="number" min="1" max="24"></div><div><label>First port number</label><input v-model.number="startNumber" type="number" min="1" max="999"></div></div>
     <button class="btn" :disabled="!isAdmin" @click="addGroup">Add port group</button>
-    <p v-if="!isAdmin" class="muted">Only administrators can save or edit templates.</p>
+    <p v-if="loadingRole" class="muted">Checking administrator access…</p>
+    <p v-else-if="roleError" class="danger">{{ roleError }}</p>
+    <p v-else-if="!isAdmin" class="muted">Only administrators can save or edit templates. Current role: {{ role || 'none' }}.</p>
     <hr><h2>Groups on front panel</h2>
     <p v-if="!groups.length" class="muted">Add a group to start designing.</p>
     <div v-for="(group,index) in groups" :key="group.id" class="group-entry">
@@ -52,7 +54,7 @@
 <script setup lang="ts">
 definePageMeta({middleware:'auth'})
 type Group={id:string;title:string;type:string;count:number;columns:number;start:number;x:number;y:number}
-const client=useSupabaseClient();const {isAdmin,refreshRole}=useAccess()
+const client=useSupabaseClient();const {isAdmin,role,loadingRole,roleError,refreshRole}=useAccess()
 const templateName=ref(''),manufacturer=ref(''),model=ref(''),rackUnits=ref(1),faceColor=ref('#263344')
 const groupTitle=ref('RJ45 ports'),portType=ref('RJ45'),portCount=ref(12),perRow=ref(6),startNumber=ref(1)
 const portTypes=['RJ45','SFP','SFP+','SFP28','QSFP','QSFP+','QSFP28','Other']
