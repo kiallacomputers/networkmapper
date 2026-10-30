@@ -49,7 +49,7 @@
       <div v-if="!sectionMode && !groups.length" class="empty-face">Add a port group to preview the switch</div>
       <div v-for="group in (sectionMode ? [] : groups)" :key="group.id" class="face-group" :style="groupStyle(group)" @pointerdown="startDrag($event,group.id)">
        <div class="face-group-title">{{ group.title }} <span>{{ group.type }}</span></div>
-       <div class="port-grid" :style="{gridTemplateColumns:`repeat(${group.columns}, ${group.portWidth||28}px)`,gap:(group.gap??4)+'px'}">
+       <div class="port-grid" :style="{gridTemplateColumns:`repeat(${group.columns}, ${effectivePortWidth(group)}px)`,gap:(group.gap??4)+'px'}">
         <button v-for="n in group.count" :key="n" type="button" class="face-port" :style="portStyle(group)" :class="{'fiber-port':group.type!=='RJ45'}" :title="`${group.type} ${group.start+n-1}`" @pointerdown.stop @click="selectedPort={label:String(group.start+n-1),type:group.type,group:group.title}">
          <span class="port-number">{{ group.start+n-1 }}</span><span class="port-hole" :class="{'duplex-hole':isDuplex(group)}"><template v-if="isDuplex(group)"><i></i><i></i></template><template v-else>{{ group.type==='RJ45'?'▥':group.sfpAppearance==='simplex'?'◻':'▭' }}</template></span>
         </button>
@@ -159,13 +159,17 @@ const sectionGridStyle=computed(()=>({gridTemplateColumns:`repeat(${sectionColum
 function applySectionGrid(){sectionColumns.value=clamp(Math.floor(Number(sectionColumns.value)||2),1,8);sectionRows.value=clamp(Math.floor(Number(sectionRows.value)||4),1,12);const previous=sections.value;sections.value=Array.from({length:sectionColumns.value*sectionRows.value},(_,i)=>previous[i]?{...previous[i],alignment:normaliseAlignment(previous[i].alignment)}:{id:crypto.randomUUID(),groupId:'',alignment:'left'})}
 function sectionBoxStyle(s:Section){return {width:clamp(Number(s.widthPercent??100),30,100)+'%',height:clamp(Number(s.heightPercent??100),30,100)+'%',padding:clamp(Number(s.padding??6),0,30)+'px',justifySelf:'start' as const,alignSelf:'start' as const,boxSizing:'border-box' as const}}
 function isDuplex(g:Group){return g.type.startsWith('SFP')&&(g.sfpAppearance||'duplex')==='duplex'}
-function portStyle(g:Group){return {width:clamp(Number(g.portWidth??28),18,90)+'px',height:clamp(Number(g.portHeight??40),24,110)+'px'}}
+// Optical cages are slightly larger than RJ45, while preserving the group's configured size.
+function isFibre(g:Group){return g.type.startsWith('SFP')||g.type.startsWith('QSFP')}
+function effectivePortWidth(g:Group){return Math.round(clamp(Number(g.portWidth??28),18,90)*(isFibre(g)?1.18:1))}
+function effectivePortHeight(g:Group){return Math.round(clamp(Number(g.portHeight??40),24,110)*(isFibre(g)?1.18:1))}
+function portStyle(g:Group){return {width:effectivePortWidth(g)+'px',height:effectivePortHeight(g)+'px'}}
 function assignedGroup(section:Section){return groups.value.find(g=>g.id===section.groupId)}
 function normaliseAlignment(value:unknown):Alignment{return value==='center'||value==='right'||value==='justify'?value:'left'}
 function sectionPortStyle(section:Section,group:Group){
  const columns=Math.min(Math.max(1,group.columns),group.count)
  const alignment=normaliseAlignment(section.alignment)
- const w=clamp(Number(group.portWidth??28),18,90)
+ const w=effectivePortWidth(group)
  const gap=clamp(Number(group.gap??4),0,40)
  return {
   gridTemplateColumns:alignment==='justify'?`repeat(${columns}, minmax(${w}px, 1fr))`:`repeat(${columns}, ${w}px)`,
@@ -180,8 +184,8 @@ function sectionPortStyle(section:Section,group:Group){
 const groups=ref<Group[]>([]),templates=ref<any[]>([]),editingId=ref(''),selectedTemplateId=ref(''),error=ref(''),notice=ref(''),saving=ref(false),selectedPort=ref<any>(null)
 const faceRef=ref<HTMLElement|null>(null);const faceHeight=computed(()=>sectionMode.value?Math.max(160,rowHeights.value.reduce((a,b)=>a+b,0)+32):Math.max(160,rackUnits.value*160));const totalPorts=computed(()=>groups.value.reduce((sum,g)=>sum+g.count,0))
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n))
-const groupWidth=(g:Group)=>g.columns*(g.portWidth??28)+Math.max(0,g.columns-1)*(g.gap??4)+16
-const groupHeight=(g:Group)=>Math.ceil(g.count/g.columns)*((g.portHeight??40)+(g.gap??4))+33
+const groupWidth=(g:Group)=>g.columns*effectivePortWidth(g)+Math.max(0,g.columns-1)*(g.gap??4)+16
+const groupHeight=(g:Group)=>Math.ceil(g.count/g.columns)*(effectivePortHeight(g)+(g.gap??4))+33
 const groupStyle=(g:Group)=>({left:g.x+'px',top:g.y+'px',width:groupWidth(g)+'px'})
 function addGroup(){if(!isAdmin.value)return;const count=clamp(Math.floor(Number(portCount.value)||1),1,96),columns=clamp(Math.floor(Number(perRow.value)||1),1,Math.min(count,24));const x=groups.value.length?Math.min(740,24+groups.value.length*210):24;groups.value.push({id:editingGroupId.value||crypto.randomUUID(),title:groupTitle.value.trim()||portType.value+' ports',type:portType.value,count,columns,start:clamp(Math.floor(Number(startNumber.value)||1),1,999),x,y:24,portWidth:clamp(Number(portWidth.value)||28,18,90),portHeight:clamp(Number(portHeight.value)||40,24,110),gap:clamp(Number(portGap.value)||0,0,40),sfpAppearance:sfpAppearance.value});startNumber.value+=count;editingGroupId.value='';notice.value='';error.value=''}
 function editGroup(index:number){const g=groups.value[index];if(!g)return;editingGroupId.value=g.id;groupTitle.value=g.title;portType.value=g.type;portCount.value=g.count;perRow.value=g.columns;startNumber.value=g.start;portWidth.value=g.portWidth??28;portHeight.value=g.portHeight??40;portGap.value=g.gap??4;sfpAppearance.value=g.sfpAppearance??'duplex';groups.value.splice(index,1);notice.value='Group loaded into the editor. Change settings and click Update port group.'}

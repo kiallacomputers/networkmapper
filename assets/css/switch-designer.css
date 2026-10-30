@@ -30,3 +30,10 @@
 .face-section{overflow:hidden}.face-section-label{margin-bottom:2px}
 .section-port-grid{align-content:start;overflow:visible}
 @media(max-width:650px){.catalog-slot{grid-template-columns:1fr}}
+
+/* Centre a single row (and compact multi-row groups) vertically within its section.
+   The heading stays at the top; oversized groups remain top-aligned without scrollbars. */
+.face-section{display:flex;flex-direction:column}
+.face-section-label{flex:0 0 auto}
+.face-section>.section-port-grid{flex:0 0 auto;margin-top:auto;margin-bottom:auto;align-content:center}
+.face-section>.section-placeholder{margin:auto 0}
