@@ -2,6 +2,28 @@
  <div class="designer-page">
   <div class="designer-heading"><div><h1>Visual Switch Designer</h1><p>Create reusable front-panel layouts with draggable port groups.</p></div><NuxtLink class="btn secondary-btn" to="/switches">Manage switches</NuxtLink></div>
   <p v-if="error" class="danger panel">{{ error }}</p><p v-if="notice" class="success-note">{{ notice }}</p>
+  <section class="panel model-lookup">
+    <h2>Device model lookup & configuration</h2>
+    <p class="muted">Search the starter catalogue, then configure the actual installed modules. Confirm module part numbers against your hardware before saving.</p>
+    <label>Find a manufacturer, model or part number</label>
+    <input v-model="catalogSearch" placeholder="e.g. Aruba 5406R, J9821A, 24-port">
+    <label>Matching chassis</label>
+    <select v-model="catalogId"><option value="">Choose a chassis…</option><option v-for="device in catalogMatches" :key="device.id" :value="device.id">{{device.manufacturer}} {{device.model}} — {{device.partNumber}}</option></select>
+    <div v-if="selectedCatalog" class="catalog-detail">
+      <p><strong>{{selectedCatalog.model}}</strong> · {{selectedCatalog.rackUnits}}U · {{selectedCatalog.slots}} configurable slots</p>
+      <p class="muted">{{selectedCatalog.notes}}</p>
+      <a v-if="selectedCatalog.source" :href="selectedCatalog.source" target="_blank" rel="noopener noreferrer">Manufacturer documentation</a>
+      <div v-for="(slot,i) in configuredSlots" :key="i" class="catalog-slot">
+        <label>{{slot.label}} — installed hardware</label>
+        <select v-model="slot.moduleId"><option value="empty">Empty</option><option v-for="mod in moduleOptions" :key="mod.id" :value="mod.id">{{mod.label}}</option></select>
+        <div v-if="slot.moduleId==='custom'" class="two-fields"><div><label>Port type</label><select v-model="slot.customType"><option v-for="t in portTypes" :key="t">{{t}}</option></select></div><div><label>Port count</label><input type="number" v-model.number="slot.customCount" min="1" max="96"></div></div>
+      </div>
+      <label><input type="checkbox" v-model="includeManagement"> Include dedicated management RJ45 port</label>
+      <p class="muted">Applying a model replaces the unsaved front-panel groups and section assignments. Existing saved templates are unaffected until you save.</p>
+      <button class="btn" :disabled="!isAdmin" @click="applyCatalogDevice">Generate front panel from configured hardware</button>
+    </div>
+    <p v-else class="muted">Model not listed? Use the Advanced Custom Designer below. The catalogue is a starter library, not a live manufacturer API.</p>
+  </section>
   <section class="panel designer-template">
     <h2>Switch template</h2>
     <label>Template name</label><input v-model="templateName" maxlength="120" placeholder="Core Switch 12 RJ45 + 6 SFP">
@@ -82,12 +104,50 @@
  </div>
 </template>
 <script setup lang="ts">
+import { deviceCatalog, moduleOptions, type ConfiguredSlot } from '~/utils/device-catalog'
 definePageMeta({middleware:'auth'})
 type Group={id:string;title:string;type:string;count:number;columns:number;start:number;x:number;y:number;portWidth?:number;portHeight?:number;gap?:number;sfpAppearance?:'duplex'|'simplex'|'cage'}
 type Alignment='left'|'center'|'right'|'justify'
 type Section={id:string;groupId:string;alignment:Alignment;widthPercent?:number;heightPercent?:number;padding?:number}
 const client=useSupabaseClient();const {isAdmin,refreshRole}=useAccess()
 const templateName=ref(''),manufacturer=ref(''),model=ref(''),rackUnits=ref(1),faceColor=ref('#263344')
+const catalogSearch=ref(''),catalogId=ref(''),includeManagement=ref(true)
+const configuredSlots=ref<ConfiguredSlot[]>([])
+const catalogMatches=computed(()=>deviceCatalog.filter(d=>`${d.manufacturer} ${d.model} ${d.partNumber}`.toLowerCase().includes(catalogSearch.value.toLowerCase())))
+const selectedCatalog=computed(()=>deviceCatalog.find(d=>d.id===catalogId.value))
+watch(catalogId,()=>{const d=selectedCatalog.value;configuredSlots.value=d?Array.from({length:d.slots},(_,i)=>({label:`Slot ${String.fromCharCode(65+i)}`,moduleId:'empty',customType:'RJ45',customCount:24})):[];includeManagement.value=!!d?.management})
+function applyCatalogDevice(){
+ const d=selectedCatalog.value;if(!d||!isAdmin.value)return
+ const slots=configuredSlots.value.map((slot,i)=>({slot,index:i,module:moduleOptions.find(m=>m.id===slot.moduleId)}))
+ const active=slots.filter(x=>x.slot.moduleId!=='empty')
+ if(!active.length&&!includeManagement.value){error.value='Select at least one module or include the management port.';return}
+ const generated:Group[]=[]
+ const generatedSections:Section[]=[]
+ const columns=d.columns
+ const rows=Math.max(1,Math.ceil((d.slots+(includeManagement.value&&d.management?columns:0))/columns))
+ const rowSizes=Array.from({length:rows},()=>116)
+ let offset=0
+ if(includeManagement.value&&d.management){
+  rowSizes[0]=65
+  generated.push({id:crypto.randomUUID(),title:'Management',type:'RJ45',count:1,columns:1,start:1,x:0,y:0,portWidth:28,portHeight:40,gap:4})
+  for(let i=0;i<columns;i++)generatedSections.push({id:crypto.randomUUID(),groupId:i===0?generated[0].id:'',alignment:'right',widthPercent:100,heightPercent:100,padding:5})
+  offset=columns
+ }
+ for(let i=0;i<d.slots;i++){
+  const entry=slots[i];let groupId=''
+  if(entry.slot.moduleId!=='empty'){
+   const count=entry.slot.moduleId==='custom'?clamp(Math.floor(Number(entry.slot.customCount)||1),1,96):(entry.module?.count||24)
+   const type=entry.slot.moduleId==='custom'?entry.slot.customType:(entry.module?.type||'RJ45')
+   const columnsPerRow=Math.min(count,count<=8?Math.min(count,4):12)
+   const g:Group={id:crypto.randomUUID(),title:`${entry.slot.label} · ${entry.module?.label||'Custom module'}`,type,count,columns:columnsPerRow,start:1,x:0,y:0,portWidth:28,portHeight:40,gap:4,sfpAppearance:'duplex'}
+   generated.push(g);groupId=g.id
+  }
+  generatedSections.push({id:crypto.randomUUID(),groupId,alignment:'center',widthPercent:100,heightPercent:100,padding:5})
+ }
+ while(generatedSections.length<rows*columns)generatedSections.push({id:crypto.randomUUID(),groupId:'',alignment:'left'})
+ groups.value=generated;sections.value=generatedSections;sectionMode.value=true;sectionColumns.value=columns;sectionRows.value=rows;rowHeightsText.value=rowSizes.join(', ')
+ templateName.value=`${d.manufacturer} ${d.model} — configured`;manufacturer.value=d.manufacturer;model.value=d.model;rackUnits.value=d.rackUnits;faceColor.value='#263344';editingId.value='';selectedTemplateId.value='';selectedPort.value=null;error.value='';notice.value='Front panel generated. Review the installed modules, port numbering and appearance before saving.'
+}
 const groupTitle=ref('RJ45 ports'),portType=ref('RJ45'),portCount=ref(12),perRow=ref(6),startNumber=ref(1)
 const portWidth=ref(28),portHeight=ref(40),portGap=ref(4),sfpAppearance=ref<'duplex'|'simplex'|'cage'>('duplex')
 const portTypes=['RJ45','SFP','SFP+','SFP28','QSFP','QSFP+','QSFP28','Other']
