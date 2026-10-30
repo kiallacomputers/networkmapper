@@ -1,6 +1,6 @@
 <template>
   <div ref="host" class="rack-face-host" :style="{background: faceColor}" aria-label="Switch front panel">
-    <div class="rack-face-canvas" :style="{height: canvasHeight+'px',transform:`scale(${scale})`,background:faceColor}">
+    <div class="rack-face-canvas" :style="{height: canvasHeight+'px',transform:`scale(${scaleX}, ${scaleY})`,background:faceColor}">
       <template v-if="sectionLayout?.enabled">
         <div class="rack-face-sections" :style="{gridTemplateColumns:`repeat(${columns}, minmax(0, 1fr))`,gridTemplateRows:rowHeights.map(h=>h+'px').join(' ')}">
           <div v-for="(section,index) in sections" :key="section.id||index" class="rack-face-section" :style="sectionStyle(section)">
@@ -34,7 +34,10 @@ const columns=computed(()=>Math.max(1,Number(sectionLayout.value?.columns)||2))
 const sections=computed<any[]>(()=>sectionLayout.value?.sections||[])
 const rowHeights=computed(()=>Array.from({length:Math.max(1,Number(sectionLayout.value?.rows)||4)},(_,i)=>Math.max(36,Number(sectionLayout.value?.rowHeights?.[i])||120)))
 const canvasHeight=computed(()=>sectionLayout.value?.enabled?rowHeights.value.reduce((a,b)=>a+b,0)+32:Math.max(160,...groups.value.map(g=>(Number(g.y)||0)+Math.ceil((Number(g.count)||1)/(Number(g.columns)||1))*((Number(g.portHeight)||40)+4)+24)))
-const scale=computed(()=>Math.max(.01,Math.min(size.value.width/920,size.value.height/canvasHeight.value)))
+// Fit both axes to the rack device face. The previous uniform scale was
+// limited by the 4U height, leaving the right half of the chassis unused.
+const scaleX=computed(()=>Math.max(.01,size.value.width/920))
+const scaleY=computed(()=>Math.max(.01,size.value.height/canvasHeight.value))
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n))
 const groupFor=(s:any)=>groups.value.find(g=>g.id===s.groupId)
 const fibre=(g:any)=>String(g.type||'').startsWith('SFP')||String(g.type||'').startsWith('QSFP')
