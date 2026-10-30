@@ -1,7 +1,7 @@
 <template>
   <UApp>
     <div class="shell">
-      <header class="header"><NuxtLink to="/" class="brand">◈ KC Network Mapper</NuxtLink><nav><NuxtLink to="/">Dashboard</NuxtLink><NuxtLink to="/sites">Sites</NuxtLink><NuxtLink to="/buildings">Buildings</NuxtLink><NuxtLink to="/switches">Switches</NuxtLink><NuxtLink to="/racks">Racks</NuxtLink><NuxtLink to="/switch-designer">Switch Designer</NuxtLink><button v-if="user" @click="logout">Sign out</button><NuxtLink v-else to="/login">Sign in</NuxtLink></nav></header>
+      <header class="header"><NuxtLink to="/" class="brand">◈ KC Network Mapper</NuxtLink><nav><NuxtLink to="/">Dashboard</NuxtLink><NuxtLink to="/sites">Sites</NuxtLink><NuxtLink to="/buildings">Buildings</NuxtLink><NuxtLink to="/switches">Switches</NuxtLink><NuxtLink to="/racks">Racks</NuxtLink><NuxtLink to="/patch-panels">Patch Panels & Outlets</NuxtLink><NuxtLink to="/switch-designer">Switch Designer</NuxtLink><button v-if="user" @click="logout">Sign out</button><NuxtLink v-else to="/login">Sign in</NuxtLink></nav></header>
       <main class="content"><NuxtPage /></main>
     </div>
   </UApp>
