@@ -20,10 +20,9 @@ const tooltip=(n:number)=>`RJ45 port ${n}${props.connections[n]?' · '+props.con
 </style>
 
 <style scoped>
-/* In a 1U rack elevation, two rows must share the available height.
-   The standard aspect-ratio otherwise makes the second row overflow/clipped. */
+/* Compact rack face: distribute the saved rows evenly inside a scalable 1U bay. */
 .patch-face-compact{gap:2px;padding:2px;overflow:hidden;align-content:stretch;grid-auto-rows:minmax(0,1fr)}
-.patch-face-compact .patch-port{aspect-ratio:auto;height:100%;min-height:0;padding:0;overflow:hidden;border-radius:1px}
-.patch-face-compact .patch-socket{height:75%;width:70%;min-height:0;border-width:1px}
+.patch-face-compact .patch-port{aspect-ratio:auto;height:100%;min-height:0;padding:1px;overflow:hidden;border-radius:1px}
+.patch-face-compact .patch-socket{height:78%;width:min(75%,20px);min-height:0;border-width:1px}
 .patch-face-compact .patch-contacts{font-size:7px;line-height:1}
 </style>
