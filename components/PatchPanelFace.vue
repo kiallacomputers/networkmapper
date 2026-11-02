@@ -1,5 +1,5 @@
 <template>
-  <div class="patch-face" :style="{gridTemplateColumns:`repeat(${Math.min(columns, count)}, minmax(0, 1fr))`}" :aria-label="`Patch panel with ${count} RJ45 ports`">
+  <div class="patch-face" :class="{'patch-face-compact':compact}" :style="{gridTemplateColumns:`repeat(${Math.max(1, Math.min(columns || 24, count || 1))}, minmax(0, 1fr))`, gridTemplateRows: compact ? `repeat(${Math.ceil(count / Math.max(1, Math.min(columns || 24, count || 1)))}, minmax(0, 1fr))` : undefined}" :aria-label="`Patch panel with ${count} RJ45 ports`">
     <button v-for="n in count" :key="n" type="button" class="patch-port" :class="{connected:!!connections[n]}" :title="tooltip(n)" :aria-label="tooltip(n)" @click.stop="$emit('port-click',{number:n,connection:connections[n]||null})">
       <span class="patch-socket"><span class="patch-contacts">▥</span></span>
       <span v-if="!compact" class="patch-number">{{n}}</span>
@@ -17,4 +17,13 @@ const tooltip=(n:number)=>`RJ45 port ${n}${props.connections[n]?' · '+props.con
 .patch-port:hover,.patch-port:focus-visible{outline:2px solid #ffcc4d;z-index:2}.patch-port.connected{border-color:#67c8a1}
 .patch-socket{display:flex;align-items:center;justify-content:center;width:80%;height:62%;background:#314c64;border:1px solid #6c9db4;border-radius:1px}
 .patch-contacts{font-size:clamp(6px,1vw,13px);line-height:1;color:#b8e8f7}.patch-number{font-size:10px;line-height:1.2}
+</style>
+
+<style scoped>
+/* In a 1U rack elevation, two rows must share the available height.
+   The standard aspect-ratio otherwise makes the second row overflow/clipped. */
+.patch-face-compact{gap:2px;padding:2px;overflow:hidden;align-content:stretch;grid-auto-rows:minmax(0,1fr)}
+.patch-face-compact .patch-port{aspect-ratio:auto;height:100%;min-height:0;padding:0;overflow:hidden;border-radius:1px}
+.patch-face-compact .patch-socket{height:75%;width:70%;min-height:0;border-width:1px}
+.patch-face-compact .patch-contacts{font-size:7px;line-height:1}
 </style>
